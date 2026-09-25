@@ -38,18 +38,27 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-  event.respondWith(
-    caches.match(request).then((hit) => {
-      if (hit) {
-        return hit;
-      }
-      return fetch(request).then((res) => {
-        if (res.ok && (VERSIONED.test(path) || !path.endsWith('.html'))) {
+  if (VERSIONED.test(path)) {
+    // 版號資產只增不刪 → 永久快取
+    event.respondWith(
+      caches.match(request).then((hit) => hit || fetch(request).then((res) => {
+        if (res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then((cache) => cache.put(request, copy));
         }
         return res;
-      });
-    })
+      }))
+    );
+    return;
+  }
+  // 其他無版號資產（sw.js 以外的靜態檔）→ network-first：改版要能被看到
+  event.respondWith(
+    fetch(request).then((res) => {
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(request, copy));
+      }
+      return res;
+    }).catch(() => caches.match(request))
   );
 });
